@@ -1,0 +1,3 @@
+# Copy this file to .dev.vars and fill in your Aryeo API key for local development.
+# Never commit .dev.vars — it is gitignored.
+ARYEO_API_KEY=your_api_key_here
