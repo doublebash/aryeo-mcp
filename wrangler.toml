@@ -13,13 +13,18 @@ preview_urls = false
 #   ARYEO_API_KEY        — Aryeo REST API token (Bearer)
 #   MCP_APPROVAL_CODE    — One-time code the operator pastes in /authorize. NEVER returned to clients.
 
+# Forkers: replace this id with your own. Create one via:
+#   wrangler kv:namespace create OAUTH_KV
+# Then paste the printed id below. The current value points at the
+# upstream maintainer's KV — useless to anyone else (Cloudflare scopes
+# KV access to your account API token), but you still need your own id
+# for wrangler to deploy under your account.
 [[kv_namespaces]]
 binding = "OAUTH_KV"
 id = "cb9eae7b67604dfa9fda963dcb8e81f2"
 
 # Per-endpoint rate limiters. All use Cloudflare's unsafe rate-limiter API (no extra cost).
 # `limit` is the max requests per `period` seconds, keyed by client IP.
-# Aryeo uses the 2xxx namespace_id range so it doesn't collide with GHL's 1xxx.
 [[unsafe.bindings]]
 name = "RATE_LIMIT_APPROVE"
 type = "ratelimit"
