@@ -2,7 +2,7 @@
 
 A custom Model Context Protocol (MCP) server that gives Claude live access to an [Aryeo](https://www.aryeo.com) account — listings, orders, customers, products, scheduling, and appointments — through natural language in Claude Desktop, claude.ai, and Claude Mobile.
 
-Hosted on Cloudflare Workers; OAuth 2.0 via `@cloudflare/workers-oauth-provider`.
+Hosted on Cloudflare Workers; built on the shared [`@bashco/mcp-toolkit`](../../../ruflo-test/audits/mcp-toolkit) library.
 
 ## Tools (15)
 
@@ -14,9 +14,9 @@ Hosted on Cloudflare Workers; OAuth 2.0 via `@cloudflare/workers-oauth-provider`
 
 ```sh
 cp .dev.vars.example .dev.vars
-# fill in ARYEO_API_KEY for local-only testing
+# fill in ARYEO_API_KEY + MCP_APPROVAL_CODE
 npm install
-npm run dev   # http://localhost:8787/mcp
+npm run dev          # http://localhost:8787/mcp
 ```
 
 ## Deploy
@@ -25,27 +25,34 @@ npm run dev   # http://localhost:8787/mcp
 npm run deploy
 ```
 
-Secrets (`ARYEO_API_KEY`, `MCP_ACCESS_TOKEN`) are stored in Cloudflare via `wrangler secret put` — never in this repo.
+Secrets (`ARYEO_API_KEY`, `MCP_APPROVAL_CODE`) are stored in Cloudflare via `wrangler secret put` — never in this repo.
 
-## Live API verification
+## Endpoints
+
+- `GET /.well-known/oauth-authorization-server` — OAuth metadata (public)
+- `GET /.well-known/oauth-protected-resource` — Resource metadata (public)
+- `GET /authorize` — Approval-code paste page (public)
+- `POST /approve` — Approval-code submission (rate-limited)
+- `POST /token` — OAuth token exchange (rate-limited)
+- `POST /register` — Dynamic client registration per RFC 7591 (rate-limited)
+- `POST /mcp` — JSON-RPC tool dispatch (bearer-protected, rate-limited)
+
+## Test + typecheck
 
 ```sh
-ARYEO_API_KEY="..." node scripts/test-new-tools.mjs
+npm run typecheck
+npm test
 ```
-
-Prints HTTP status + response shape for each new tool against the real Aryeo API.
-
-## Documentation
-
-- [`aryeo_mcp_gap_audit.md`](./aryeo_mcp_gap_audit.md) — coverage report of MCP vs the full Aryeo API surface, with priority recommendations and a documented spec-vs-live-API drift caveat
-- Architecture, security model, and changelog are maintained in the owner's Obsidian vault
 
 ## Notes on Aryeo's API
 
-The published OpenAPI spec at `docs.aryeo.com` is **not** a faithful description of the live API. Notably:
+The published OpenAPI spec at `docs.aryeo.com` is **not** a faithful description of the live API. Verified differences:
 
-- `GET /products/{id}` is in some clients' assumptions but is not implemented (returns `404 - Uh oh that path isn't found`)
-- `GET /products` accepts flat query params (`?type=MAIN`), not the spec's bracketed form (`?filter[type]=MAIN`)
-- The valid `include` allowlist for `/products` is enforced server-side and returned in the 400 body when an unknown value is sent — `variants` is **not** a valid include (variants are returned by default)
+- `GET /products/{id}` is not implemented (returns `404 - Uh oh that path isn't found`)
+- `GET /products` accepts flat query params (`?type=MAIN`), not bracketed (`?filter[type]=MAIN`)
+- The valid `include` allowlist for `/products` is enforced server-side and returned in the 400 body when an unknown value is sent — `variants` is **not** a valid include
+- Status enums are **uppercase** across listings (`DRAFT`, `FOR_SALE`, ...), orders (`CONFIRMED`, `PAID`, `FULFILLED`, ...), and appointments (`SCHEDULED`, `UNSCHEDULED`, `CANCELED` — American spelling)
+- `GET /customers/{id}` works despite being absent from the spec (verified 2026-05-18)
+- `GET /appointments` does **not** support any server-side date filter (verified 2026-05-18 — neither `start_date`, `end_date`, `start_at_gte`, nor `start_at_lte` filter the result set)
 
-Verify endpoints against the live API before wrapping. See the gap audit for details.
+See `aryeo_mcp_gap_audit.md` for the full coverage report and the v2 migration audit at `~/ruflo-test/audits/aryeo-mcp/AUDIT.md` for the rebuild rationale.

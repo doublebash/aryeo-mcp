@@ -1,59 +1,71 @@
-import OAuthProvider from "@cloudflare/workers-oauth-provider";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { authHandler, type Env } from "./auth.js";
-import { registerTools } from "./tools.js";
+import { Hono } from "hono";
+import {
+  createBearerMiddleware,
+  createCors,
+  createMcpRouter,
+  createOAuthServer,
+  createRateLimit,
+  DEFAULT_CLAUDE_ORIGINS,
+  OAUTH_PUBLIC_PATHS,
+} from "@bashco/mcp-toolkit";
+import {
+  ALLOWED_REDIRECT_HOSTS,
+  DEFAULT_PROTOCOL_VERSION,
+  SERVER_NAME,
+  SERVER_VERSION,
+  SUPPORTED_PROTOCOL_VERSIONS,
+} from "./constants.js";
+import { aryeoEnvFrom, type WorkerEnv } from "./env.js";
+import { dispatchToolCall, toolDefinitions } from "./mcp/tools.js";
 
-// 1 MB cap on incoming bodies — generous for any legitimate JSON-RPC tool call,
-// blocks slow-loris / oversized-body DoS regardless of platform defaults.
-const MAX_MCP_BODY_BYTES = 1024 * 1024;
+const app = new Hono<{ Bindings: WorkerEnv }>();
 
-// Handles authenticated requests to /mcp
-const mcpHandler = {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    // Only POST is supported — Cloudflare Workers can't hold open SSE streams
-    if (request.method !== "POST") {
-      return new Response("Method Not Allowed", { status: 405 });
-    }
+app.use("*", createCors({ allowedOrigins: DEFAULT_CLAUDE_ORIGINS }));
+app.use(
+  "*",
+  createBearerMiddleware({
+    kv: (env) => (env as WorkerEnv).OAUTH_KV,
+    publicPaths: OAUTH_PUBLIC_PATHS,
+    realm: SERVER_NAME,
+  }),
+);
 
-    // Reject requests with unexpected content types before they reach the MCP SDK
-    const ct = request.headers.get("Content-Type") ?? "";
-    if (!ct.includes("application/json")) {
-      return new Response("Unsupported Media Type", { status: 415 });
-    }
-
-    // Reject oversized bodies before parsing.
-    const contentLengthHeader = request.headers.get("Content-Length");
-    if (contentLengthHeader !== null) {
-      const contentLength = parseInt(contentLengthHeader, 10);
-      if (Number.isFinite(contentLength) && contentLength > MAX_MCP_BODY_BYTES) {
-        return new Response("Payload Too Large", { status: 413 });
-      }
-    }
-
-    const server = new McpServer({ name: "Aryeo MCP", version: "1.0.0" });
-    registerTools(server, env.ARYEO_API_KEY);
-
-    const transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: undefined, // stateless — no session persistence needed
-    });
-
-    await server.connect(transport);
-    return transport.handleRequest(request);
+const oauth = createOAuthServer<WorkerEnv>({
+  serverName: SERVER_NAME,
+  approvalCodeName: "MCP_APPROVAL_CODE",
+  kv: (env) => env.OAUTH_KV,
+  approvalCodeSecret: (env) => env.MCP_APPROVAL_CODE,
+  allowedRedirectHosts: ALLOWED_REDIRECT_HOSTS,
+  rateLimiters: {
+    approve: createRateLimit<WorkerEnv>({
+      binding: (env) => env.RATE_LIMIT_APPROVE,
+      bucketName: "approve",
+    }),
+    token: createRateLimit<WorkerEnv>({
+      binding: (env) => env.RATE_LIMIT_TOKEN,
+      bucketName: "token",
+    }),
+    register: createRateLimit<WorkerEnv>({
+      binding: (env) => env.RATE_LIMIT_REGISTER,
+      bucketName: "register",
+    }),
   },
-};
-
-// OAuthProvider wraps the whole worker:
-//  - /mcp       → validated by OAuth, then forwarded to mcpHandler
-//  - /authorize → password form in authHandler
-//  - /token     → handled automatically by OAuthProvider
-//  - /register  → enables Claude to self-register as a client on first connection
-//  - all others → 404 via authHandler
-export default new OAuthProvider({
-  apiRoute: "/mcp",
-  apiHandler: mcpHandler,
-  defaultHandler: authHandler,
-  authorizeEndpoint: "/authorize",
-  tokenEndpoint: "/token",
-  clientRegistrationEndpoint: "/register",
 });
+
+const mcp = createMcpRouter<WorkerEnv>({
+  serverName: SERVER_NAME,
+  serverVersion: SERVER_VERSION,
+  protocolVersions: SUPPORTED_PROTOCOL_VERSIONS,
+  defaultProtocolVersion: DEFAULT_PROTOCOL_VERSION,
+  toolDefinitions,
+  dispatch: async (env, _ctx, name, args) => dispatchToolCall(aryeoEnvFrom(env), name, args),
+  rateLimiter: createRateLimit<WorkerEnv>({
+    binding: (env) => env.RATE_LIMIT_MCP,
+    bucketName: "mcp",
+  }),
+});
+
+app.route("/", oauth.routes);
+app.route("/", mcp);
+
+export default app;

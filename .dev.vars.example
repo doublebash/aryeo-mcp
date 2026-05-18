@@ -1,3 +1,4 @@
-# Copy this file to .dev.vars and fill in your Aryeo API key for local development.
+# Copy this file to .dev.vars and fill in real values for local development.
 # Never commit .dev.vars — it is gitignored.
-ARYEO_API_KEY=your_api_key_here
+ARYEO_API_KEY=your_aryeo_api_key_here
+MCP_APPROVAL_CODE=choose_a_local_dev_password_min_24_chars

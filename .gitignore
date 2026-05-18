@@ -15,6 +15,10 @@ dist/
 .DS_Store
 *.log
 
+# Local AI agent state (e.g. Claude Code session caches)
+.claude-flow/
+.claude/
+
 # Output / scratch dirs
 /tmp/
 *.tmp
