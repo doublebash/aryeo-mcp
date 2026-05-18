@@ -1,20 +1,46 @@
 {
   "name": "aryeo-mcp",
-  "version": "1.0.0",
+  "version": "2.0.0",
+  "description": "Cloudflare Workers Model Context Protocol server bridging Claude to the Aryeo real-estate media platform — listings, orders, customers, products, scheduling, appointments. Built on @bashco/mcp-toolkit.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "anthropic",
+    "aryeo",
+    "real-estate",
+    "cloudflare-workers",
+    "oauth"
+  ],
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "type-check": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
-    "@cloudflare/workers-oauth-provider": "^0.4.0",
-    "@modelcontextprotocol/sdk": "^1.11.0",
-    "zod": "^3.23.8"
+    "@bashco/mcp-toolkit": "^1.0.0",
+    "hono": "^4.12.15",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250430.0",
-    "typescript": "^5.5.2",
-    "wrangler": "^4.0.0"
+    "@cloudflare/vitest-pool-workers": "^0.5.40",
+    "@cloudflare/workers-types": "^4.20260426.1",
+    "typescript": "^5.7.2",
+    "vitest": "~2.1.9",
+    "wrangler": "^4.90.0"
+  },
+  "author": "Bashar Basheer",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/doublebash/aryeo-mcp.git"
+  },
+  "homepage": "https://github.com/doublebash/aryeo-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/doublebash/aryeo-mcp/issues"
   }
 }

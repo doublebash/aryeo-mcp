@@ -1,14 +1,50 @@
 name = "aryeo-mcp"
 main = "src/index.ts"
-compatibility_date = "2025-04-01"
+compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 
 workers_dev = true
 preview_urls = false
 
+[vars]
+# Non-secret config. Populate ENVIRONMENT in [env.production.vars] etc. if you ever split envs.
+
+# Secrets stored via `wrangler secret put` (see README.md for the full list):
+#   ARYEO_API_KEY        — Aryeo REST API token (Bearer)
+#   MCP_APPROVAL_CODE    — One-time code the operator pastes in /authorize. NEVER returned to clients.
+
+# Forkers: replace this id with your own. Create one via:
+#   wrangler kv:namespace create OAUTH_KV
+# Then paste the printed id below. The current value points at the
+# upstream maintainer's KV — useless to anyone else (Cloudflare scopes
+# KV access to your account API token), but you still need your own id
+# for wrangler to deploy under your account.
 [[kv_namespaces]]
 binding = "OAUTH_KV"
 id = "cb9eae7b67604dfa9fda963dcb8e81f2"
 
-[vars]
-# Secrets are set via: wrangler secret put ARYEO_API_KEY / MCP_ACCESS_TOKEN
+# Per-endpoint rate limiters. All use Cloudflare's unsafe rate-limiter API (no extra cost).
+# `limit` is the max requests per `period` seconds, keyed by client IP.
+[[unsafe.bindings]]
+name = "RATE_LIMIT_APPROVE"
+type = "ratelimit"
+namespace_id = "2001"
+simple = { limit = 5, period = 60 }
+
+[[unsafe.bindings]]
+name = "RATE_LIMIT_TOKEN"
+type = "ratelimit"
+namespace_id = "2002"
+simple = { limit = 10, period = 60 }
+
+[[unsafe.bindings]]
+name = "RATE_LIMIT_REGISTER"
+type = "ratelimit"
+namespace_id = "2003"
+simple = { limit = 10, period = 60 }
+
+[[unsafe.bindings]]
+name = "RATE_LIMIT_MCP"
+type = "ratelimit"
+namespace_id = "2004"
+simple = { limit = 60, period = 60 }
