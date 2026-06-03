@@ -10,6 +10,7 @@ import {
 } from "@bashco/mcp-toolkit";
 import {
   ALLOWED_REDIRECT_HOSTS,
+  ALLOWED_REDIRECT_SCHEMES,
   DEFAULT_PROTOCOL_VERSION,
   SERVER_NAME,
   SERVER_VERSION,
@@ -36,6 +37,7 @@ const oauth = createOAuthServer<WorkerEnv>({
   kv: (env) => env.OAUTH_KV,
   approvalCodeSecret: (env) => env.MCP_APPROVAL_CODE,
   allowedRedirectHosts: ALLOWED_REDIRECT_HOSTS,
+  allowedRedirectSchemes: ALLOWED_REDIRECT_SCHEMES,
   rateLimiters: {
     approve: createRateLimit<WorkerEnv>({
       binding: (env) => env.RATE_LIMIT_APPROVE,

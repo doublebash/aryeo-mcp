@@ -11,7 +11,14 @@ export const ALLOWED_REDIRECT_HOSTS = new Set<string>([
   "api.claude.ai",
   "claude.com",
   "api.claude.com",
+  // Native-app OAuth callbacks (RFC 8252) for CLI clients like Claude Code
+  // Desktop and Hermes Agent. Localhost is only reachable from the same
+  // machine, so tokens cannot be intercepted by remote attackers.
+  "localhost",
+  "127.0.0.1",
 ]);
+
+export const ALLOWED_REDIRECT_SCHEMES = new Set<string>(["https:", "http:"]);
 
 // VERIFIED 2026-05-18 against live API — see CHANGELOG for the curl evidence.
 // Listings status values are uppercase enums from Aryeo's listing-status set.
