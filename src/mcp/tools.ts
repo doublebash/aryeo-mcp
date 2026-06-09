@@ -36,6 +36,14 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
     "Use `include` to expand related resources — common values: orders, listings, group. " +
     "Run `list_customers` first if you only have a name or email.",
 
+  create_customer:
+    "Add a new customer (agent or agency group) to your Aryeo group. " +
+    "Required: owner_first_name, owner_last_name, email. Optional: phone. " +
+    "The customer's display `name` is auto-set by Aryeo to '<first> <last>' — " +
+    "do not try to override it. Aryeo also auto-creates a customer_team and emails " +
+    "the owner an invitation; their status stays 'inactive' until they accept. " +
+    "Returns the created customer record including its new Aryeo UUID.",
+
   list_appointments:
     "List appointments scheduled in your Aryeo group. Filter by order UUID or status " +
     "(SCHEDULED/UNSCHEDULED/CANCELED). " +

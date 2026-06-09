@@ -83,6 +83,13 @@ export const toolSchemas = {
     include: includeRelations,
   }),
 
+  create_customer: z.object({
+    owner_first_name: z.string().min(1).max(255),
+    owner_last_name: z.string().min(1).max(255),
+    email: z.string().email().max(255),
+    phone: z.string().min(1).max(50).optional(),
+  }),
+
   list_appointments: z.object({
     order_id: aryeoUuid.optional(),
     status: appointmentStatus.optional(),

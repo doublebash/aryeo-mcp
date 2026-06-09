@@ -2,15 +2,15 @@
 
 A **Model Context Protocol** server bridging Claude to the [Aryeo](https://www.aryeo.com) real-estate media platform — listings, orders, customers, products, scheduling, and appointments — deployed on **Cloudflare Workers**.
 
-Fork this repo, deploy to your own Cloudflare account, point Claude.ai at your worker, and Claude can read and write your Aryeo data through 15 typed tools.
+Fork this repo, deploy to your own Cloudflare account, point Claude.ai at your worker, and Claude can read and write your Aryeo data through 16 typed tools.
 
 Built on [`@bashco/mcp-toolkit`](https://github.com/doublebash/mcp-toolkit) — OAuth, per-client bearer tokens, rate limiting, structured logging, and typed tool dispatch are all handled by the shared library.
 
-## Tools (15)
+## Tools (16)
 
 **Read** — `list_listings`, `get_listing`, `list_orders`, `get_order`, `list_customers`, `get_customer`, `list_products`, `list_product_categories`, `list_order_items`, `get_order_item`, `list_appointments`, `get_available_timeslots`
 
-**Write** — `create_appointment`, `reschedule_appointment`, `cancel_appointment`
+**Write** — `create_customer`, `create_appointment`, `reschedule_appointment`, `cancel_appointment`
 
 Full live catalogue at the `tools/list` MCP endpoint after deploy.
 
@@ -127,6 +127,7 @@ The published OpenAPI spec at `docs.aryeo.com` is **not** a faithful description
 - Status enums are **uppercase** across listings (`DRAFT`, `FOR_SALE`, ...), orders (`CONFIRMED`, `PAID`, `FULFILLED`, ...), and appointments (`SCHEDULED`, `UNSCHEDULED`, `CANCELED` — American spelling)
 - `GET /customers/{id}` works despite being absent from the spec
 - `GET /appointments` does **not** support any server-side date filter (neither `start_date`, `end_date`, `start_at_gte`, nor `start_at_lte` filter the result set)
+- `POST /customers` accepts `owner_first_name`, `owner_last_name`, `email`, and `phone`. It silently overrides any `name` you send (Aryeo sets it to `"<first> <last>"`) and silently drops `internal_notes`. There is no `DELETE /customers/{id}` (returns the path-not-found 404). Creating a customer also auto-creates a `customer_team` and emails the owner an invitation; their `status` stays `inactive` until they accept. Aryeo "customers" are agent groups (`type: AGENT`), not end-consumers.
 
 If you're extending the tool surface, **verify against the live API first** with a curl probe — the spec misses or misdescribes a real chunk of endpoints.
 

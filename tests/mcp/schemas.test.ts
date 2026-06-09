@@ -9,6 +9,7 @@ const expectedTools: ToolName[] = [
   "get_order",
   "list_customers",
   "get_customer",
+  "create_customer",
   "list_appointments",
   "get_available_timeslots",
   "create_appointment",
@@ -23,7 +24,7 @@ const expectedTools: ToolName[] = [
 const VALID_UUID = "019de176-1c40-7347-b815-eb92c249b9f6";
 
 describe("tool catalogue", () => {
-  it("declares the expected 15 tools", () => {
+  it("declares the expected 16 tools", () => {
     expect(toolDefinitions.length).toBe(expectedTools.length);
     const names = toolDefinitions.map((t) => t.name);
     for (const name of expectedTools) {
@@ -76,6 +77,50 @@ describe("argument validation — orders", () => {
   it("rejects a bad payment_status enum value", () => {
     const result = toolSchemas.list_orders.safeParse({ payment_status: "paid" });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("argument validation — customers", () => {
+  it("rejects create_customer missing all required fields", () => {
+    const result = toolSchemas.create_customer.safeParse({});
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects create_customer with an invalid email", () => {
+    const result = toolSchemas.create_customer.safeParse({
+      owner_first_name: "Test",
+      owner_last_name: "User",
+      email: "not-an-email",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts create_customer with the three required fields only", () => {
+    const result = toolSchemas.create_customer.safeParse({
+      owner_first_name: "Test",
+      owner_last_name: "User",
+      email: "test@example.com",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts create_customer with optional phone", () => {
+    const result = toolSchemas.create_customer.safeParse({
+      owner_first_name: "Test",
+      owner_last_name: "User",
+      email: "test@example.com",
+      phone: "+64 21 000 0000",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("does not expose write-rejected fields (name, internal_notes) on create_customer", () => {
+    // Aryeo silently overrides `name` (sets it to "<first> <last>") and silently
+    // drops `internal_notes` on POST /customers — verified live 2026-06-09. The
+    // schema is strict, so attempting to pass them must fail validation.
+    const props = Object.keys(toolSchemas.create_customer.shape);
+    expect(props).not.toContain("name");
+    expect(props).not.toContain("internal_notes");
   });
 });
 

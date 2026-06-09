@@ -42,3 +42,34 @@ export async function getCustomer(
     },
   });
 }
+
+// VERIFIED 2026-06-09 against live API (POST /v1/customers):
+//   - required fields: owner_first_name, owner_last_name, email
+//   - optional accepted: phone
+//   - silently overridden: `name` (server sets it to "<first> <last>")
+//   - silently dropped: `internal_notes` (not write-accepted on create)
+// Side effect: also auto-creates a customer_team and emails the owner
+// an invitation; their status stays "inactive" until they accept.
+// Aryeo "customers" are agent groups, not end-consumers (type: "AGENT").
+export interface CreateCustomerInput {
+  owner_first_name: string;
+  owner_last_name: string;
+  email: string;
+  phone?: string;
+}
+
+export async function createCustomer(
+  env: AryeoApiEnv,
+  input: CreateCustomerInput,
+): Promise<unknown> {
+  return aryeoFetch(env, {
+    method: "POST",
+    path: "/customers",
+    body: {
+      owner_first_name: input.owner_first_name,
+      owner_last_name: input.owner_last_name,
+      email: input.email,
+      ...(input.phone !== undefined ? { phone: input.phone } : {}),
+    },
+  });
+}

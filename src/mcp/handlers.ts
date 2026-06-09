@@ -6,7 +6,7 @@ import {
   listAppointments,
   rescheduleAppointment,
 } from "../aryeo/appointments.js";
-import { getCustomer, listCustomers } from "../aryeo/customers.js";
+import { createCustomer, getCustomer, listCustomers } from "../aryeo/customers.js";
 import { getListing, listListings } from "../aryeo/listings.js";
 import {
   getOrder,
@@ -55,6 +55,14 @@ export const HANDLERS: { [N in ToolName]: Handler<N> } = {
     }),
 
   get_customer: (env, { customer_id, include }) => getCustomer(env, customer_id, include),
+
+  create_customer: (env, args) =>
+    createCustomer(env, {
+      owner_first_name: args.owner_first_name,
+      owner_last_name: args.owner_last_name,
+      email: args.email,
+      ...(args.phone !== undefined ? { phone: args.phone } : {}),
+    }),
 
   list_appointments: (env, args) =>
     listAppointments(env, {
