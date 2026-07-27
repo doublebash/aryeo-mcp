@@ -1,5 +1,5 @@
 import type { AryeoApiEnv } from "../env.js";
-import { aryeoFetch, includeParam } from "./client.js";
+import { aryeoFetch, filterParams, includeParam } from "./client.js";
 import { buildPath } from "./path.js";
 
 export interface ListCustomersInput {
@@ -9,6 +9,8 @@ export interface ListCustomersInput {
   include?: string[];
 }
 
+// VERIFIED 2026-07-27: `?search=` is IGNORED here (returned all 47 customers);
+// `?filter[search]=` works (returned 1). See filterParams() in client.ts.
 export async function listCustomers(
   env: AryeoApiEnv,
   input: ListCustomersInput,
@@ -17,7 +19,7 @@ export async function listCustomers(
     method: "GET",
     path: "/customers",
     query: {
-      ...(input.search !== undefined ? { search: input.search } : {}),
+      ...filterParams({ search: input.search }),
       ...(input.page !== undefined ? { page: input.page } : {}),
       ...(input.per_page !== undefined ? { per_page: input.per_page } : {}),
       ...(includeParam(input.include) !== undefined

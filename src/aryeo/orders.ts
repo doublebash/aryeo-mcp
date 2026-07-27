@@ -4,7 +4,7 @@ import type {
   OrderPaymentStatus,
   OrderStatus,
 } from "../constants.js";
-import { aryeoFetch, includeParam } from "./client.js";
+import { aryeoFetch, filterParams, includeParam, listWithClientFilter } from "./client.js";
 import { buildPath } from "./path.js";
 
 export interface ListOrdersInput {
@@ -17,24 +17,50 @@ export interface ListOrdersInput {
   include?: string[];
 }
 
+interface OrderRecord {
+  listing?: { id?: string };
+}
+
+// VERIFIED 2026-07-27 against the live account (58 orders total). Bracketed
+// lowercase filters work and partition cleanly:
+//   filter[status]:            open=55, canceled=3, draft=0, confirmed=0
+//   filter[payment_status]:    paid=49, unpaid=9, partially_paid=0
+//   filter[fulfillment_status]: fulfilled=47, unfulfilled=11
+// The flat forms this code used to send (payment_status=PAID etc.) all returned
+// the unfiltered 58. There is NO working listing filter — filter[listing_id],
+// filter[listing] and filter[listing_ids][] were each ignored — so that one is
+// applied client-side.
 export async function listOrders(env: AryeoApiEnv, input: ListOrdersInput): Promise<unknown> {
+  const serverQuery = {
+    ...filterParams({
+      status: input.status,
+      payment_status: input.payment_status,
+      fulfillment_status: input.fulfillment_status,
+    }),
+    ...(includeParam(input.include) !== undefined
+      ? { include: includeParam(input.include) }
+      : {}),
+  };
+
+  if (input.listing_id !== undefined) {
+    // The listing object is not in the default payload, so force the include.
+    const withListing = new Set(["listing", ...(input.include ?? [])]);
+    return listWithClientFilter<OrderRecord>(
+      env,
+      "/orders",
+      { ...serverQuery, include: Array.from(withListing).join(",") },
+      (order) => order.listing?.id === input.listing_id,
+      `Aryeo does not support filtering /orders by listing; listing_id=${input.listing_id} applied client-side.`,
+    );
+  }
+
   return aryeoFetch(env, {
     method: "GET",
     path: "/orders",
     query: {
-      ...(input.status !== undefined ? { status: input.status } : {}),
-      ...(input.payment_status !== undefined
-        ? { payment_status: input.payment_status }
-        : {}),
-      ...(input.fulfillment_status !== undefined
-        ? { fulfillment_status: input.fulfillment_status }
-        : {}),
-      ...(input.listing_id !== undefined ? { listing_id: input.listing_id } : {}),
+      ...serverQuery,
       ...(input.page !== undefined ? { page: input.page } : {}),
       ...(input.per_page !== undefined ? { per_page: input.per_page } : {}),
-      ...(includeParam(input.include) !== undefined
-        ? { include: includeParam(input.include) }
-        : {}),
     },
   });
 }

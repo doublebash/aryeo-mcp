@@ -90,25 +90,51 @@ export const toolSchemas = {
     phone: z.string().min(1).max(50).optional(),
   }),
 
+  // No `include` here, deliberately. Aryeo 400s on the values agents reach for
+  // (customer, agents, listing, address) — none are in its allowlist for
+  // /appointments — and the default payload already nests the order, its
+  // listing and that listing's street address, so expansion buys a shoot
+  // briefing nothing. See the header comment in aryeo/appointments.ts.
+  //
+  // start_date/end_date/timezone are filtered inside this Worker, never sent
+  // upstream: Aryeo ignores date params on this endpoint.
   list_appointments: z.object({
     order_id: aryeoUuid.optional(),
     status: appointmentStatus.optional(),
+    start_date: isoDate.optional(),
+    end_date: isoDate.optional(),
+    timezone: z.string().min(1).max(64).optional(),
     page: pageNum.optional(),
     per_page: perPageNum.optional(),
-    include: includeRelations,
   }),
 
+  // `duration` is optional on both scheduling tools: supply an order_id and it
+  // is derived from that order's products (see aryeo/duration.ts). Aryeo itself
+  // never does this — it treats duration as a caller-owned input — so deriving
+  // it here is what makes product timings actually reach the calendar.
   get_available_timeslots: z.object({
     start_date: isoDate,
-    end_date: isoDate,
+    end_date: isoDate.optional(),
     order_id: aryeoUuid.optional(),
-    region_id: aryeoUuid.optional(),
+    duration: z
+      .number()
+      .int()
+      .min(APPOINTMENT_DURATION_MIN)
+      .max(APPOINTMENT_DURATION_MAX)
+      .optional(),
+    interval: z.number().int().min(5).max(240).optional(),
+    timezone: z.string().min(1).max(64).optional(),
   }),
 
   create_appointment: z.object({
     order_id: aryeoUuid,
     start_at: isoDatetime,
-    duration: z.number().int().min(APPOINTMENT_DURATION_MIN).max(APPOINTMENT_DURATION_MAX),
+    duration: z
+      .number()
+      .int()
+      .min(APPOINTMENT_DURATION_MIN)
+      .max(APPOINTMENT_DURATION_MAX)
+      .optional(),
     notify_customer: z.boolean().optional().default(true),
   }),
 

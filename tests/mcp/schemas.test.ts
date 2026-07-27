@@ -140,16 +140,51 @@ describe("argument validation — appointments", () => {
     expect(result.success).toBe(true);
   });
 
-  it("does not expose date filter fields on list_appointments (server-side filtering unsupported)", () => {
-    // start_date and end_date should be rejected because the schema is strict.
-    // (Aryeo silently ignores both server-side per 2026-05-18 verification.)
-    const schema = toolSchemas.list_appointments;
-    // Asserting via a positive test — the schema does not declare these fields.
-    const props = Object.keys(schema.shape);
-    expect(props).not.toContain("start_date");
-    expect(props).not.toContain("end_date");
-    expect(props).not.toContain("start_at_gte");
-    expect(props).not.toContain("start_at_lte");
+  it("exposes start_date/end_date/timezone on list_appointments", () => {
+    // These are NOT forwarded to Aryeo — it ignores date params on this
+    // endpoint. They drive the Worker-side filter, which is what makes a daily
+    // shoot briefing possible without pulling the whole appointment feed.
+    const result = toolSchemas.list_appointments.safeParse({
+      start_date: "2026-07-28",
+      end_date: "2026-07-28",
+      timezone: "Pacific/Auckland",
+      status: "SCHEDULED",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a malformed start_date or end_date", () => {
+    expect(toolSchemas.list_appointments.safeParse({ start_date: "28/07/2026" }).success).toBe(
+      false,
+    );
+    expect(toolSchemas.list_appointments.safeParse({ end_date: "2026-7-8" }).success).toBe(false);
+    expect(
+      toolSchemas.list_appointments.safeParse({ start_date: "2026-07-28T00:00:00Z" }).success,
+    ).toBe(false);
+  });
+
+  it("rejects an empty or over-long timezone", () => {
+    expect(toolSchemas.list_appointments.safeParse({ timezone: "" }).success).toBe(false);
+    expect(toolSchemas.list_appointments.safeParse({ timezone: "x".repeat(65) }).success).toBe(
+      false,
+    );
+  });
+
+  it("does not accept `include` on list_appointments", () => {
+    // The production break: the briefing sent include=customer,listing,address,
+    // agents and Aryeo answered 400 "Requested include(s) ... are not allowed".
+    // The field is gone from the schema, so Zod strips it and it can never
+    // reach the wire. (Aryeo's allowlist here is order/order.address/
+    // order.customer/order.listing/items/owner/... — verified live 2026-07-28.)
+    const props = Object.keys(toolSchemas.list_appointments.shape);
+    expect(props).not.toContain("include");
+
+    const result = toolSchemas.list_appointments.safeParse({
+      start_date: "2026-07-28",
+      include: ["customer", "listing", "address", "agents"],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).not.toHaveProperty("include");
   });
 
   it("rejects out-of-range duration on create_appointment", () => {
