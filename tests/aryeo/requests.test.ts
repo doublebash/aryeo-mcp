@@ -275,16 +275,49 @@ describe("deriveOrderDuration — the product timings actually reaching the cale
     expect((await deriveOrderDuration(ENV, ORDER_ID)).duration).toBe(75);
   });
 
-  it("falls back to an unambiguous price match when a product was renamed", async () => {
+  it("NEVER matches on price alone — an equal price is a coincidence, not a match", async () => {
+    // Regression guard for a real defect found on 2026-07-27. Order #1067
+    // "Kitchen Photogaphy" ($250) price-matched the product "Small Apartment
+    // Video" ($250, 45 min) — an unrelated service — and would have booked a
+    // 45-minute slot on the strength of two numbers being equal.
     stubFetch([
       [
         "/orders/",
-        { data: { items: [{ title: "Old Package Name", quantity: 1, unit_price_amount: 38900 }] } },
+        { data: { items: [{ title: "Kitchen Photogaphy", quantity: 1, unit_price_amount: 25000 }] } },
       ],
       [
         "/products",
         {
-          data: [{ title: "Renamed Package", variants: [{ duration: 75, price_amount: 38900 }] }],
+          data: [{ title: "Small Apartment Video", variants: [{ duration: 45, price_amount: 25000 }] }],
+          meta: { last_page: 1 },
+        },
+      ],
+    ]);
+
+    await expectUserMessage(deriveOrderDuration(ENV, ORDER_ID), /do not match any product title/);
+  });
+
+  it("matches titles case-insensitively", async () => {
+    stubFetch([
+      [
+        "/orders/",
+        {
+          data: {
+            items: [
+              { title: "small essentials listing package", quantity: 1, unit_price_amount: 38900 },
+            ],
+          },
+        },
+      ],
+      [
+        "/products",
+        {
+          data: [
+            {
+              title: "Small Essentials Listing Package",
+              variants: [{ duration: 75, price_amount: 38900 }],
+            },
+          ],
           meta: { last_page: 1 },
         },
       ],
@@ -324,25 +357,28 @@ describe("deriveOrderDuration — the product timings actually reaching the cale
     await expect(deriveOrderDuration(ENV, ORDER_ID)).rejects.toThrow(/Mystery Service/);
   });
 
-  it("refuses a price match when two products share that price with different durations", async () => {
+  it("names the offending free-text titles so the caller can act on the failure", async () => {
+    // Hand-typed admin orders look like this — 26 of 27 live orders do.
     stubFetch([
       [
         "/orders/",
-        { data: { items: [{ title: "Unknown Title", quantity: 1, unit_price_amount: 74900 }] } },
+        { data: { items: [{ title: "Photos + Short Video", quantity: 1, unit_price_amount: 27900 }] } },
       ],
       [
         "/products",
         {
           data: [
-            { title: "Small Premium Package", variants: [{ duration: 120, price_amount: 74900 }] },
-            { title: "Apartment Luxury Package", variants: [{ duration: 150, price_amount: 74900 }] },
+            {
+              title: "Small Essentials Listing Package",
+              variants: [{ duration: 75, price_amount: 38900 }],
+            },
           ],
           meta: { last_page: 1 },
         },
       ],
     ]);
 
-    await expectUserMessage(deriveOrderDuration(ENV, ORDER_ID), /could not be matched/);
+    await expectUserMessage(deriveOrderDuration(ENV, ORDER_ID), /"Photos \+ Short Video"/);
   });
 
   it("fails clearly when every product on the order is a 0-minute edit-only service", async () => {

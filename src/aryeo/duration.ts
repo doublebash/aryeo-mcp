@@ -20,12 +20,27 @@ import { buildPath } from "./path.js";
  * `GET /orders/{id}?include=items` returns only title / price / quantity, the
  * `/order-items/{id}` detail endpoint returns the same fields, and no include
  * on /orders exposes the variant (allowed includes are enumerated by Aryeo's
- * 400 response and none of them reach it). Title is therefore the only join
- * key available, with unit price as a corroborating signal.
+ * 400 response and none of them reach it). EXACT TITLE is the only sound join
+ * key available.
  *
- * We deliberately FAIL rather than under-count when an item cannot be matched:
- * a silently short appointment double-books a photographer, which is worse
- * than an error telling the caller to pass an explicit duration.
+ * NO PRICE FALLBACK — measured against 27 live orders on 2026-07-27. An earlier
+ * version fell back to matching on unit price when the title did not match. It
+ * produced 6 of its 7 "successes" that way, and they were coincidences: order
+ * #1067 "Kitchen Photogaphy" ($250) matched the product "Small Apartment Video"
+ * ($250, 45 min) — an unrelated service — and would have booked 45 minutes on
+ * the strength of two numbers being equal. Prices collide constantly across a
+ * media catalogue, so price carries no semantic signal. It is gone.
+ *
+ * PRACTICAL REACH: only orders whose line items were created FROM the product
+ * catalogue (i.e. placed through the Aryeo order form) can be derived. Orders
+ * hand-typed in the Aryeo admin carry free-text titles like "Photos + Short
+ * Video" and will not match. On the live account that is 1 order in 27. The
+ * fix for that is upstream — build orders from catalogue products — not a
+ * looser matcher here.
+ *
+ * We deliberately FAIL rather than guess when an item cannot be matched:
+ * a silently wrong appointment length misallocates a photographer's day, which
+ * is worse than an error telling the caller to pass an explicit duration.
  */
 
 interface OrderItem {
@@ -89,7 +104,7 @@ export async function deriveOrderDuration(
 
   for (const item of items) {
     const title = (item.title ?? "").trim();
-    const minutes = lookupDuration(catalogue, title, item.unit_price_amount);
+    const minutes = catalogue.byTitle.get(title.toLowerCase());
     if (minutes === undefined) {
       unmatched.push(title || "(untitled item)");
       continue;
@@ -102,10 +117,14 @@ export async function deriveOrderDuration(
   if (unmatched.length > 0) {
     throw new ToolError({
       userMessage:
-        `Cannot derive a shoot length: ${unmatched.length} order item(s) could not be matched ` +
-        `to a product in the Aryeo catalogue — ${unmatched.join(", ")}. ` +
-        "Order items expose no product id, so matching is by exact title; a renamed or " +
-        "deleted product breaks it. Pass an explicit `duration` (minutes) to proceed.",
+        `Cannot derive a shoot length: ${unmatched.length} order item(s) do not match any product ` +
+        `title in the Aryeo catalogue — ${unmatched.map((t) => `"${t}"`).join(", ")}. ` +
+        "This normally means the order was typed by hand in the Aryeo admin rather than placed " +
+        "through the order form, so its line items are free text. " +
+        "Order items expose no product id and matching on price is unsafe (unrelated services " +
+        "share prices), so there is nothing reliable to derive from. " +
+        "Use `list_products` to see the configured duration for the intended service, confirm " +
+        "the shoot length with the user, then call again with an explicit `duration`.",
       internalMessage: `deriveOrderDuration: unmatched titles on order ${orderId}: ${unmatched.join(" | ")}`,
       status: 422,
       upstreamName: "Aryeo",
@@ -127,17 +146,13 @@ export async function deriveOrderDuration(
   return { duration, breakdown };
 }
 
-/** title (lowercased) -> minutes, plus a price fallback for renamed products. */
+/** Product title (lowercased) -> configured shoot minutes. */
 interface ProductCatalogue {
   byTitle: Map<string, number>;
-  byPrice: Map<number, number>;
-  ambiguousPrices: Set<number>;
 }
 
 async function fetchProductDurations(env: AryeoApiEnv): Promise<ProductCatalogue> {
   const byTitle = new Map<string, number>();
-  const byPrice = new Map<number, number>();
-  const ambiguousPrices = new Set<number>();
 
   // The catalogue is small (27 products on this account) but paginated at 20.
   for (let page = 1; page <= 10; page++) {
@@ -152,36 +167,11 @@ async function fetchProductDurations(env: AryeoApiEnv): Promise<ProductCatalogue
       if (!variant || typeof variant.duration !== "number") continue;
       const title = (product.title ?? "").trim().toLowerCase();
       if (title) byTitle.set(title, variant.duration);
-
-      const price = variant.price_amount;
-      if (typeof price === "number") {
-        // Several products share a price (both 120-min Premium packages are
-        // $749). A price collision is only usable if the durations agree.
-        const seen = byPrice.get(price);
-        if (seen !== undefined && seen !== variant.duration) ambiguousPrices.add(price);
-        else byPrice.set(price, variant.duration);
-      }
     }
 
     const lastPage = response?.meta?.last_page ?? page;
     if (page >= lastPage) break;
   }
 
-  return { byTitle, byPrice, ambiguousPrices };
-}
-
-function lookupDuration(
-  catalogue: ProductCatalogue,
-  title: string,
-  unitPrice: number | undefined,
-): number | undefined {
-  const byTitle = catalogue.byTitle.get(title.toLowerCase());
-  if (byTitle !== undefined) return byTitle;
-
-  // Fallback: an unambiguous price match. Covers a product renamed after the
-  // order was placed, where the item still carries the old title.
-  if (unitPrice !== undefined && !catalogue.ambiguousPrices.has(unitPrice)) {
-    return catalogue.byPrice.get(unitPrice);
-  }
-  return undefined;
+  return { byTitle };
 }

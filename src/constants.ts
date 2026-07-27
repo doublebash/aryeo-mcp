@@ -1,5 +1,5 @@
 export const SERVER_NAME = "aryeo-mcp";
-export const SERVER_VERSION = "2.1.0";
+export const SERVER_VERSION = "2.1.1";
 
 export const ARYEO_BASE_URL = "https://api.aryeo.com/v1";
 
