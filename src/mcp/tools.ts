@@ -50,15 +50,25 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
     "Returns the created customer record including its new Aryeo UUID.",
 
   list_appointments:
-    "List appointments scheduled in your Aryeo group. Filter by order UUID or status " +
-    "(SCHEDULED/UNSCHEDULED/CANCELED). " +
-    "NOTE: Aryeo supports NO filtering at all on this endpoint — not by date, status or order " +
-    "(verified 2026-07-27). When you pass order_id or status this tool fetches up to 500 " +
-    "appointments and filters them itself; the response meta reports how many records were " +
-    "scanned and sets `truncated: true` if the account has more than the walk covered. " +
-    "If truncated, say so rather than presenting the list as complete. " +
-    "Date ranges still have to be filtered in conversation. " +
-    "Use `include` to expand related resources — common values: order, customer, agents, listing, address.",
+    "List appointments (shoots) scheduled in your Aryeo group, optionally narrowed to a date " +
+    "range, an order UUID, or a status (SCHEDULED/UNSCHEDULED/CANCELED). " +
+    "FOR A DAILY SHOOT BRIEFING pass start_date and end_date set to the same day — without a " +
+    "date filter this returns every appointment on the account, which is megabytes of JSON and " +
+    "will be truncated before you can read it. " +
+    "start_date/end_date are YYYY-MM-DD and INCLUSIVE; end_date defaults to start_date, so a " +
+    "lone start_date means that single day. `timezone` is an IANA name defaulting to " +
+    "Pacific/Auckland, and it matters: Aryeo returns start_at in UTC, so on a NZ account roughly " +
+    "40% of appointments fall on a different calendar day locally than their UTC timestamp reads. " +
+    "HOW FILTERING WORKS: Aryeo itself supports NO filtering on this endpoint — not by date, not " +
+    "by status, not by order (verified 2026-07-27/28; it returns the full collection with a 200 " +
+    "and ignores the params). This Worker therefore applies every filter itself, over a bounded " +
+    "scan of at most 500 appointments. The response meta reports `records_scanned`, " +
+    "`records_matched`, `scan_limit` and, when dates were used, the `date_filter` applied. " +
+    "If meta.truncated is true the account holds more appointments than the scan covered — say " +
+    "so, and do NOT present the results as the complete set. " +
+    "page/per_page apply only to an unfiltered call; filtered calls walk Aryeo's pages internally. " +
+    "`include` is NOT supported on this tool: Aryeo rejects customer/agents/listing/address with " +
+    "a 400, and the default payload already nests the order, its listing and the street address.",
 
   get_available_timeslots:
     "Get available appointment timeslots for scheduling a shoot. " +

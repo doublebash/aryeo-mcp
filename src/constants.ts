@@ -1,5 +1,5 @@
 export const SERVER_NAME = "aryeo-mcp";
-export const SERVER_VERSION = "2.1.1";
+export const SERVER_VERSION = "2.2.0";
 
 export const ARYEO_BASE_URL = "https://api.aryeo.com/v1";
 
@@ -98,3 +98,9 @@ export const MAX_TIMESLOT_DAYS = 14;
 // fetching. These bound that walk.
 export const CLIENT_FILTER_MAX_PAGES = 5;
 export const CLIENT_FILTER_PAGE_SIZE = 100;
+
+// The ceiling on a single client-side filter walk, reported to callers as
+// `meta.scan_limit`. Sized against the live account (52 appointments as of
+// 2026-07-28) with roughly 10x headroom; beyond it `meta.truncated` goes true
+// and the result must not be described as complete.
+export const APPOINTMENT_SCAN_LIMIT = CLIENT_FILTER_MAX_PAGES * CLIENT_FILTER_PAGE_SIZE;

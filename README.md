@@ -126,10 +126,37 @@ The published OpenAPI spec at `docs.aryeo.com` is **not** a faithful description
 - The valid `include` allowlist for `/products` is enforced server-side and returned in the 400 body when an unknown value is sent — `variants` is **not** a valid include
 - Status enums are **uppercase** across listings (`DRAFT`, `FOR_SALE`, ...), orders (`CONFIRMED`, `PAID`, `FULFILLED`, ...), and appointments (`SCHEDULED`, `UNSCHEDULED`, `CANCELED` — American spelling)
 - `GET /customers/{id}` works despite being absent from the spec
-- `GET /appointments` does **not** support any server-side date filter (neither `start_date`, `end_date`, `start_at_gte`, nor `start_at_lte` filter the result set)
+- `GET /appointments` supports **no server-side filtering at all** — not by date (`start_date`, `end_date`, `start_at_gte`, `start_at_lte`), status, or order. Every variant returns the full collection with a `200`, so the failure is invisible. See [Appointment filtering](#appointment-filtering-is-done-in-the-worker) below.
+- The `include` allowlist on `/appointments` **excludes** `customer`, `agents`, `listing` and `address` — all four return a `400` naming the permitted set (`order`, `order.address`, `order.customer`, `order.listing`, `items`, `owner`, `users`, …). The default payload already nests the order, its listing, and that listing's street address, so `list_appointments` exposes no `include` parameter at all.
 - `POST /customers` accepts `owner_first_name`, `owner_last_name`, `email`, and `phone`. It silently overrides any `name` you send (Aryeo sets it to `"<first> <last>"`) and silently drops `internal_notes`. There is no `DELETE /customers/{id}` (returns the path-not-found 404). Creating a customer also auto-creates a `customer_team` and emails the owner an invitation; their `status` stays `inactive` until they accept. Aryeo "customers" are agent groups (`type: AGENT`), not end-consumers.
 
 If you're extending the tool surface, **verify against the live API first** with a curl probe — the spec misses or misdescribes a real chunk of endpoints.
+
+### Appointment filtering is done in the Worker
+
+Because `GET /appointments` honours no filters, `list_appointments` applies them itself:
+
+1. Walk Aryeo's pages, up to **500 appointments** (`APPOINTMENT_SCAN_LIMIT`, 5 pages of 100).
+2. Filter that set in-memory on `order_id`, `status` and the requested date window.
+3. Return **only the matches**, plus a `meta` block reporting the scan honestly.
+
+`start_date` / `end_date` are inclusive `YYYY-MM-DD` bounds and are **never sent upstream**. `end_date` defaults to `start_date`, so a lone `start_date` means that single day. `timezone` is an IANA name defaulting to `Pacific/Auckland`.
+
+The timezone is not cosmetic. Aryeo returns `start_at` in **UTC** (`2026-08-09T21:30:00Z`); on this NZ account **21 of 52 appointments fall on a different local calendar day than their UTC prefix reads**, so slicing the ISO string would misfile 40% of shoots. Dates are resolved with `Intl.DateTimeFormat`, which tracks NZST/NZDT correctly.
+
+Response `meta`:
+
+| Field | Meaning |
+|---|---|
+| `records_scanned` | Appointments pulled from Aryeo and examined |
+| `records_matched` | Appointments returned in `data` (`count` is the same number, kept for older callers) |
+| `pages_scanned` / `scan_limit` | How far the walk got, and its ceiling (500) |
+| `truncated` | `true` when the account holds more appointments than the scan covered — **the result is then incomplete and must not be presented as the full set** |
+| `date_filter` | The window and timezone actually applied (absent when no date filter was used) |
+
+`page` / `per_page` apply only to an *unfiltered* call, which stays a plain passthrough to Aryeo; a filtered call owns its own pagination and reports a `pagination_note` if you pass them anyway.
+
+**Why this exists:** a scheduled morning briefing calling `list_appointments` with no date filter pulls **~1.3 MB for 52 appointments** (median 26 KB each — `order.listing.images` alone runs to 52 KB on a delivered listing) and gets truncated by the client before it can be read. Filtering to a single day returns **~4 KB**. Measured 2026-07-28.
 
 ## Continuous deployment
 

@@ -94,9 +94,11 @@ export const HANDLERS: { [N in ToolName]: Handler<N> } = {
     listAppointments(env, {
       ...(args.order_id !== undefined ? { order_id: args.order_id } : {}),
       ...(args.status !== undefined ? { status: args.status } : {}),
+      ...(args.start_date !== undefined ? { start_date: args.start_date } : {}),
+      ...(args.end_date !== undefined ? { end_date: args.end_date } : {}),
+      ...(args.timezone !== undefined ? { timezone: args.timezone } : {}),
       ...(args.page !== undefined ? { page: args.page } : {}),
       ...(args.per_page !== undefined ? { per_page: args.per_page } : {}),
-      ...(args.include !== undefined ? { include: args.include } : {}),
     }),
 
   get_available_timeslots: async (env, args) => {
