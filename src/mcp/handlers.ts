@@ -1,4 +1,7 @@
+import { ToolError } from "@bashco/mcp-toolkit";
+import { DEFAULT_SLOT_INTERVAL_MINUTES, DEFAULT_TIMEZONE } from "../constants.js";
 import type { AryeoApiEnv } from "../env.js";
+import { deriveOrderDuration } from "../aryeo/duration.js";
 import {
   cancelAppointment,
   createAppointment,
@@ -18,6 +21,29 @@ import { listProductCategories, listProducts } from "../aryeo/products.js";
 import type { ToolArgs, ToolName } from "./schemas.js";
 
 type Handler<N extends ToolName> = (env: AryeoApiEnv, args: ToolArgs<N>) => Promise<unknown>;
+
+/**
+ * Resolve a slot length for get_available_timeslots: explicit value wins,
+ * otherwise derive it from the order's products. Aryeo requires a duration and
+ * will not infer one, so we refuse to invent a number when given neither.
+ */
+async function resolveDuration(
+  env: AryeoApiEnv,
+  explicit: number | undefined,
+  orderId: string | undefined,
+): Promise<number> {
+  if (explicit !== undefined) return explicit;
+  if (orderId !== undefined) return (await deriveOrderDuration(env, orderId)).duration;
+  throw new ToolError({
+    userMessage:
+      "Pass either `duration` (minutes) or `order_id`. Aryeo sizes availability slots by the " +
+      "requested appointment length and has no default, so asking for slots without one would " +
+      "return times that may not fit the shoot.",
+    internalMessage: "get_available_timeslots: neither duration nor order_id supplied",
+    status: 422,
+    upstreamName: "Aryeo",
+  });
+}
 
 export const HANDLERS: { [N in ToolName]: Handler<N> } = {
   list_listings: (env, args) =>
@@ -73,21 +99,41 @@ export const HANDLERS: { [N in ToolName]: Handler<N> } = {
       ...(args.include !== undefined ? { include: args.include } : {}),
     }),
 
-  get_available_timeslots: (env, args) =>
-    getAvailableTimeslots(env, {
+  get_available_timeslots: async (env, args) => {
+    const duration = await resolveDuration(env, args.duration, args.order_id);
+    return getAvailableTimeslots(env, {
       start_date: args.start_date,
-      end_date: args.end_date,
-      ...(args.order_id !== undefined ? { order_id: args.order_id } : {}),
-      ...(args.region_id !== undefined ? { region_id: args.region_id } : {}),
-    }),
+      ...(args.end_date !== undefined ? { end_date: args.end_date } : {}),
+      duration,
+      interval: args.interval ?? DEFAULT_SLOT_INTERVAL_MINUTES,
+      timezone: args.timezone ?? DEFAULT_TIMEZONE,
+    });
+  },
 
-  create_appointment: (env, args) =>
-    createAppointment(env, {
+  create_appointment: async (env, args) => {
+    const derived =
+      args.duration === undefined ? await deriveOrderDuration(env, args.order_id) : undefined;
+    const duration = args.duration ?? derived!.duration;
+
+    const appointment = await createAppointment(env, {
       order_id: args.order_id,
       start_at: args.start_at,
-      duration: args.duration,
+      duration,
       notify_customer: args.notify_customer,
-    }),
+    });
+
+    // Report the length actually booked and where it came from — silently
+    // booking a different span than the caller expected is exactly the failure
+    // mode this rewrite exists to prevent.
+    return {
+      appointment,
+      scheduling: {
+        duration_minutes: duration,
+        duration_source: derived ? "derived_from_order_products" : "explicit_caller_override",
+        ...(derived ? { product_breakdown: derived.breakdown } : {}),
+      },
+    };
+  },
 
   reschedule_appointment: (env, args) =>
     rescheduleAppointment(env, {

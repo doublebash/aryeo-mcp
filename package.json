@@ -1,6 +1,6 @@
 {
   "name": "aryeo-mcp",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Cloudflare Workers Model Context Protocol server bridging Claude to the Aryeo real-estate media platform — listings, orders, customers, products, scheduling, appointments. Built on @bashco/mcp-toolkit.",
   "keywords": [
     "mcp",

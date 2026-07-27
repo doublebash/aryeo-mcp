@@ -98,17 +98,33 @@ export const toolSchemas = {
     include: includeRelations,
   }),
 
+  // `duration` is optional on both scheduling tools: supply an order_id and it
+  // is derived from that order's products (see aryeo/duration.ts). Aryeo itself
+  // never does this — it treats duration as a caller-owned input — so deriving
+  // it here is what makes product timings actually reach the calendar.
   get_available_timeslots: z.object({
     start_date: isoDate,
-    end_date: isoDate,
+    end_date: isoDate.optional(),
     order_id: aryeoUuid.optional(),
-    region_id: aryeoUuid.optional(),
+    duration: z
+      .number()
+      .int()
+      .min(APPOINTMENT_DURATION_MIN)
+      .max(APPOINTMENT_DURATION_MAX)
+      .optional(),
+    interval: z.number().int().min(5).max(240).optional(),
+    timezone: z.string().min(1).max(64).optional(),
   }),
 
   create_appointment: z.object({
     order_id: aryeoUuid,
     start_at: isoDatetime,
-    duration: z.number().int().min(APPOINTMENT_DURATION_MIN).max(APPOINTMENT_DURATION_MAX),
+    duration: z
+      .number()
+      .int()
+      .min(APPOINTMENT_DURATION_MIN)
+      .max(APPOINTMENT_DURATION_MAX)
+      .optional(),
     notify_customer: z.boolean().optional().default(true),
   }),
 

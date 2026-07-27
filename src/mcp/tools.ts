@@ -16,9 +16,14 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
     "Run `list_listings` first if you only have an address or MLS number.",
 
   list_orders:
-    "List all orders for your Aryeo group. Filter by overall status (CONFIRMED/CANCELED/DRAFT), " +
+    "List all orders for your Aryeo group. Filter by status (OPEN/DRAFT/CANCELED/CONFIRMED), " +
     "payment_status (PAID/UNPAID/PARTIALLY_PAID), fulfillment_status " +
     "(FULFILLED/UNFULFILLED/PARTIALLY_FULFILLED), or a specific listing UUID. " +
+    "NOTE on status: Aryeo filters on the order's lifecycle, so most live orders are OPEN — " +
+    "CONFIRMED matches almost nothing even though the response `status` field reads CONFIRMED. " +
+    "Use OPEN for 'current orders' and CANCELED for cancelled ones. " +
+    "listing_id has no server-side support and is applied client-side over a bounded fetch; " +
+    "check `truncated` in the response meta before treating those results as complete. " +
     "Use `include` to expand related resources — common values: customer, agents, items, listing, appointments, address, group.",
 
   get_order:
@@ -47,23 +52,44 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   list_appointments:
     "List appointments scheduled in your Aryeo group. Filter by order UUID or status " +
     "(SCHEDULED/UNSCHEDULED/CANCELED). " +
-    "NOTE: Aryeo's API does not support server-side date filtering on this endpoint " +
-    "(verified 2026-05-18). Fetch and filter in conversation if you need a date range. " +
+    "NOTE: Aryeo supports NO filtering at all on this endpoint — not by date, status or order " +
+    "(verified 2026-07-27). When you pass order_id or status this tool fetches up to 500 " +
+    "appointments and filters them itself; the response meta reports how many records were " +
+    "scanned and sets `truncated: true` if the account has more than the walk covered. " +
+    "If truncated, say so rather than presenting the list as complete. " +
+    "Date ranges still have to be filtered in conversation. " +
     "Use `include` to expand related resources — common values: order, customer, agents, listing, address.",
 
   get_available_timeslots:
-    "Get available appointment timeslots for scheduling a shoot, within a date range. " +
-    "Optionally filter by order UUID or region UUID. Dates are YYYY-MM-DD.",
+    "Get available appointment timeslots for scheduling a shoot. " +
+    "PREFERRED USAGE: pass `order_id` and the slot length is derived from that order's " +
+    "products (e.g. a Small Essentials Listing Package = 75 min), so the times returned are " +
+    "long enough for the actual job. Pass `duration` (minutes) instead to override, or when " +
+    "there is no order yet. One of the two is required — Aryeo sizes slots by the requested " +
+    "length and has no default. " +
+    "start_date is YYYY-MM-DD; end_date is optional (defaults to start_date, max 14 days — " +
+    "Aryeo returns one day per request). " +
+    "`interval` is how far apart candidate start times are, defaulting to the group's " +
+    "configured 15 minutes. `timezone` is an IANA name, defaulting to Pacific/Auckland. " +
+    "Returns one entry per day, each with its slots, plus a meta block stating the duration used.",
 
   create_appointment:
     "Book a new appointment for a listing shoot against an existing order. " +
     "start_at is ISO 8601 with timezone offset (e.g. 2025-06-01T10:00:00+12:00). " +
-    "duration is in minutes (15-480). " +
+    "LEAVE `duration` UNSET unless you have a specific reason to override it: the shoot " +
+    "length is then derived from the order's products, which is almost always what you want. " +
+    "Aryeo does NOT do this itself — it stores whatever span it is given — so a guessed " +
+    "duration silently books a photographer for the wrong length of time. " +
+    "The response reports duration_minutes, duration_source and, when derived, the " +
+    "per-product breakdown. " +
+    "The order must already have an address, or Aryeo rejects the booking. " +
     "notify_customer (default true) sends a confirmation email to the order's customer.",
 
   reschedule_appointment:
-    "Reschedule an existing appointment to a new start time. " +
+    "Reschedule an existing appointment to a new start time, keeping its current length. " +
     "start_at is ISO 8601 with timezone offset. " +
+    "To change how long the shoot runs, cancel and rebook with create_appointment instead — " +
+    "this endpoint takes no duration. " +
     "notify_customer (default true) sends a notification to the customer about the change.",
 
   cancel_appointment:
@@ -73,8 +99,10 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   list_products:
     "List all products in your Aryeo group — services, packages, add-ons. " +
     "Each product is returned with `variants` (pricing, duration) and `categories` already expanded. " +
-    "Filter by type (MAIN = top-level services, ADDON = add-ons), search by title/description, " +
-    "or set active=false to also include inactive products. " +
+    "Filter by type (MAIN = top-level services, ADDON = add-ons) or search by title/description. " +
+    "`active` has no server-side support and is applied client-side over a bounded fetch. " +
+    "Each variant's `duration` is the shoot time Aryeo has configured for that product — this " +
+    "is what create_appointment uses when you leave its duration unset. " +
     "Use `include` for further expansion — verified-allowed values: categories, categoriesCount, " +
     "categoriesExists, order_form_categories, order_form_categoriesCount, order_form_categoriesExists, " +
     "order_form_categories.order_form. (`variants` is NOT a valid include here — it's in the default response.) " +

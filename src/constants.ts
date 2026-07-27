@@ -1,5 +1,5 @@
 export const SERVER_NAME = "aryeo-mcp";
-export const SERVER_VERSION = "2.0.0";
+export const SERVER_VERSION = "2.1.0";
 
 export const ARYEO_BASE_URL = "https://api.aryeo.com/v1";
 
@@ -38,7 +38,16 @@ export type ListingStatus = (typeof LISTING_STATUSES)[number];
 
 // VERIFIED 2026-05-18 against live API — orders expose THREE separate status-like
 // fields (payment_status, fulfillment_status, status). Each has its own enum.
-export const ORDER_STATUSES = ["CONFIRMED", "CANCELED", "DRAFT"] as const;
+//
+// RE-VERIFIED 2026-07-27: these are RESPONSE values. The `filter[status]` query
+// param accepts a different, overlapping set — open / draft / canceled /
+// confirmed (lowercase). Measured on the live account: open=55, canceled=3
+// (=58 total), draft=0, confirmed=0 — even though every order's response
+// `status` field reads "CONFIRMED". Aryeo's filter is keyed off the order's
+// lifecycle (`order_status`, e.g. "OPEN"), not the response `status` field.
+// We expose the filterable set and uppercase it for consistency with responses;
+// toAryeoFilterValue() lowercases on the wire.
+export const ORDER_STATUSES = ["OPEN", "DRAFT", "CANCELED", "CONFIRMED"] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
 export const ORDER_PAYMENT_STATUSES = ["PAID", "UNPAID", "PARTIALLY_PAID"] as const;
@@ -67,3 +76,25 @@ export const APPOINTMENT_DURATION_MAX = 480;
 export const SEARCH_MAX_CHARS = 255;
 export const CANCEL_REASON_MAX_CHARS = 500;
 export const PAGE_PER_PAGE_MAX = 100;
+
+// VERIFIED 2026-07-27 — /scheduling/available-timeslots requires `timezone`,
+// `date` and `interval`; `duration` sets the length of each returned slot
+// (interval=30 + duration=120 yields 30-min-apart slots that are 2h long).
+// The group's configured granularity is exposed on any order as
+// booking_limits.slot_interval_minutes (15 on this account).
+export const DEFAULT_SLOT_INTERVAL_MINUTES = 15;
+
+// Every customer record on this account is Pacific/Auckland. Forks operating in
+// another region should change this — it is only a fallback when the caller
+// does not pass an explicit IANA timezone.
+export const DEFAULT_TIMEZONE = "Pacific/Auckland";
+
+// Aryeo's timeslot endpoint accepts ONE date per call. We loop to support a
+// range; this caps how many upstream requests a single tool call can make.
+export const MAX_TIMESLOT_DAYS = 14;
+
+// VERIFIED 2026-07-27 — Aryeo ignores (rather than rejects) filters it does not
+// support, so several documented filters must be applied client-side after
+// fetching. These bound that walk.
+export const CLIENT_FILTER_MAX_PAGES = 5;
+export const CLIENT_FILTER_PAGE_SIZE = 100;
